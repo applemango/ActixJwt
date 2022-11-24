@@ -22,6 +22,12 @@ struct CreateTokenRequest {
 #[derive(Serialize)]
 struct CreateTokenResponse {
     token: String,
+    refresh_token: String,
+}
+
+#[derive(Serialize)]
+struct CreateRefreshTokenResponse {
+    token: String,
 }
 
 //#[derive(Debug)]
@@ -38,16 +44,64 @@ async fn create_token(data: web::Json<CreateTokenRequest>) -> Result<impl Respon
     
     let token_key = HS256Key::from_bytes(b"secret");
     println!("{:?}", token_key.to_bytes());
+
     let token_claims = TokenClaims {
         refresh: false,
     };
-    let claims = Claims::with_custom_claims(token_claims, Duration::from_hours(2)).with_subject(1);
+    let claims = Claims::with_custom_claims(token_claims, Duration::from_mins(15)).with_subject(1);
     let token =  match token_key.authenticate(claims) {
         Ok(token) => token,
         Err(_) => return Err(MyError {name : "Invalid token"}),
     };
+
+    let token_claims = TokenClaims {
+        refresh: true,
+    };
+    let claims_ = Claims::with_custom_claims(token_claims, Duration::from_hours(24)).with_subject(1);
+    let refresh_token_ =  match token_key.authenticate(claims_) {
+        Ok(token) => token,
+        Err(_) => return Err(MyError {name : "Invalid token"}),
+    };
+    
     Ok(web::Json(CreateTokenResponse {
         token: token,
+        refresh_token: refresh_token_,
+    }))
+}
+
+#[post("/refresh")]
+async fn refresh_token(req: HttpRequest) -> Result<impl Responder, MyError> {
+    fn get_content_type<'a>(req: &'a HttpRequest) -> Option<&'a str> {
+        req.headers().get("Authorization")?.to_str().ok()
+    }
+    let token;
+    if let Some(t) = get_content_type(&req) {
+        token = &t[7..];
+    } else {
+        return Err(MyError {name : "Invalid token"})
+    }
+
+    let token_key = HS256Key::from_bytes(b"secret");
+    let claims = match token_key.verify_token::<TokenClaims>(&token, None) {
+        Ok(claims) => claims,
+        Err(_) => return Err(MyError {name : "Invalid token"}),
+    };
+
+    if ! claims.custom.refresh {
+        return Err(MyError {name : "Invalid token"})
+    }
+
+    let token_claims = TokenClaims {
+        refresh: false,
+    };
+    let claims = Claims::with_custom_claims(token_claims, Duration::from_mins(15)).with_subject(1);
+    let token =  match token_key.authenticate(claims) {
+        Ok(token) => token,
+        Err(_) => return Err(MyError {name : "Invalid token"}),
+    };
+
+    Ok(web::Json(CreateRefreshTokenResponse {
+        token: token
     }))
 }
 
@@ -69,6 +123,10 @@ async fn hello(req: HttpRequest) -> Result<impl Responder, MyError> {
         Ok(claims) => claims,
         Err(_) => return Err(MyError {name : "Invalid token"}),
     };
+
+    if claims.custom.refresh {
+        return Err(MyError {name : "Invalid token"})
+    }
     //println!("{:#?}", claims);
     Ok(HttpResponse::Ok().body("Hello world!"))
 }
@@ -103,6 +161,7 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new()
             .service(create_token)
+            .service(refresh_token)
             .service(hello)
     })
     .bind(("127.0.0.1", 8080))?
