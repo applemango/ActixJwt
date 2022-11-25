@@ -19,3 +19,11 @@ log = "0.4"
 [dependencies.rusqlite]
 version = "*"
 features = ["bundled"]
+
+[dependencies.uuid]
+version = "1.2.2"
+features = [
+    "v4",
+    "fast-rng",
+    "macro-diagnostics",
+]
