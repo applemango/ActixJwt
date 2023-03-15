@@ -9,12 +9,9 @@ edition = "2021"
 serde = { version = "1.0", features = ["derive"] }
 actix-web = "4"
 actix-web-httpauth = "*"
-
 jwt-simple = "0.10"
-
+rust-crypto = "0.2"
 derive_more = "0.99.17"
-env_logger = "0.8"
-log = "0.4"
 
 [dependencies.rusqlite]
 version = "*"
@@ -26,4 +23,4 @@ features = [
     "v4",
     "fast-rng",
     "macro-diagnostics",
-]
+] 
